@@ -211,6 +211,34 @@ async def show_ward_wish(message: Message):
         reply_markup=get_gift_confirmation_kb()
     )
 
+@router.message(lambda m: m.text == "🗑 Удалить игру")
+async def delete_game_button(message: Message):
+    user_id = message.from_user.id
+
+    # Найдём игру, созданную этим пользователем
+    conn = sqlite3.connect("santa.db")
+    c = conn.cursor()
+    c.execute("SELECT game_code FROM games WHERE creator_id = ?", (user_id,))
+    game_row = c.fetchone()
+    if not game_row:
+        await message.answer("❌ Вы не создавали игру.")
+        return
+
+    game_code = game_row[0]
+
+    # Удаляем всех участников
+    c.execute("DELETE FROM participants WHERE game_code = ?", (game_code,))
+    # Удаляем саму игру
+    c.execute("DELETE FROM games WHERE game_code = ?", (game_code,))
+    conn.commit()
+    conn.close()
+
+    await message.answer(
+        f"✅ Игра <b>{game_code}</b> удалена. Все участники очищены.",
+        parse_mode="HTML",
+        reply_markup=get_main_kb_static()  # возвращаем базовое меню
+    )
+
 @router.callback_query(lambda c: c.data == "gift_bought")
 async def handle_gift_bought(callback: types.CallbackQuery):
     user_id = callback.from_user.id
