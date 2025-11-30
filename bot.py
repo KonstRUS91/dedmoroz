@@ -119,8 +119,9 @@ async def create_game_handler(message: Message):
         return
     conn.close()
 
-game_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-create_game(game_code, message.from_user.id)
+    # ← ЭТА СТРОКА ДОЛЖНА БЫТЬ С ОТСТУПОМ (4 пробела)!
+    game_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    create_game(game_code, message.from_user.id)
     await message.answer(
         f"✅ Игра создана! Код для участников:\n\n<b>{game_code}</b>\n\nПоделись этим кодом, чтобы друзья присоединились!",
         parse_mode="HTML",
