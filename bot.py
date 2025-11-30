@@ -79,7 +79,7 @@ async def get_main_kb(user_id: int) -> ReplyKeyboardMarkup:
         conn.close()
 
         if not draw_done:
-        keyboard.insert(1, [KeyboardButton(text="🎲 Жеребьёвка")])
+         keyboard.insert(1, [KeyboardButton(text="🎲 Жеребьёвка")])
         keyboard.insert(1, [KeyboardButton(text="👥 Список участников")])
         keyboard.insert(2, [KeyboardButton(text="🗑 Удалить игру")])
 
