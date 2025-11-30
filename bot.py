@@ -99,7 +99,7 @@ def get_gift_confirmation_kb():
 async def cmd_start(message: Message):
     from database import init_db
     init_db()
-    await message.answer("🎄 Добро пожаловать в игру «Тайный Санта»!", reply_markup=await get_main_kb(message.from_user.id))
+    await message.answer("🎄 Добро пожаловать в игру «Тайный Дед Мороз»!", reply_markup=await get_main_kb(message.from_user.id))
 
 @router.message(lambda m: m.text == "🆕 Создать игру")
 async def create_game_handler(message: Message):
