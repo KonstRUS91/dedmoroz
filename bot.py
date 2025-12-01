@@ -583,5 +583,43 @@ async def admin_del_user(message: Message):
     else:
         await message.answer(f"❌ Пользователь <code>{target}</code> не найден.", parse_mode="HTML")
 
+@router.message(Command("admin_alarm"))
+async def admin_alarm(message: Message):
+    # 🔒 Проверка: только админ
+    if message.from_user.id != ВАШ_TELEGRAM_ID:  # замени на свой ID
+        return
+
+    # Получаем текст после команды
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Использование:\n<code>/admin_alarm текст объявления</code>", parse_mode="HTML")
+        return
+
+    announcement_text = parts[1]
+
+    # 📢 Получаем всех участников
+    from database import get_all_participants
+    user_ids = get_all_participants()
+
+    if not user_ids:
+        await message.answer("📭 Нет участников для уведомления.")
+        return
+
+    # 📩 Рассылаем сообщение
+    success = 0
+    for user_id in user_ids:
+        try:
+            await bot.send_message(
+                user_id,
+                f"🔔 <b>Объявление от организатора:</b>\n\n{announcement_text}",
+                parse_mode="HTML"
+            )
+            success += 1
+        except Exception as e:
+            # Например, пользователь заблокировал бота
+            print(f"Не удалось отправить {user_id}: {e}")
+
+    await message.answer(f"✅ Объявление отправлено {success} из {len(user_ids)} участников.")
+
 if __name__ == "__main__":
     asyncio.run(main())
