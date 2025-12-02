@@ -333,31 +333,41 @@ async def confirm_delete_game(message: Message):
 
 @router.callback_query(lambda c: c.data.startswith("delgame_yes_"))
 async def handle_delete_game_confirm(callback: types.CallbackQuery):
-    game_code = callback.data.split("_", 3)[3]  # извлекаем код из callback_data
+    await callback.answer()  # ← обязательно в начале!
 
-    # Удаляем участников и саму игру
-    conn = sqlite3.connect("santa.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM participants WHERE game_code = ?", (game_code,))
-    c.execute("DELETE FROM games WHERE game_code = ?", (game_code,))
-    deleted = c.rowcount > 0
-    conn.commit()
-    conn.close()
+    try:
+        # Извлекаем game_code безопасно
+        game_code = callback.data.replace("delgame_yes_", "", 1)
+        if not game_code:
+            raise ValueError("Пустой код игры")
 
-    if deleted:
-        await callback.answer("✅ Игра удалена.")
-        await callback.message.edit_text(
-            f"✅ Игра <b>{game_code}</b> успешно удалена.",
-            parse_mode="HTML"
-        )
-    else:
-        await callback.answer("❌ Игра не найдена.", show_alert=True)
-        await callback.message.edit_text("❌ Игра не найдена.")
+        conn = sqlite3.connect("santa.db")
+        c = conn.cursor()
+        c.execute("DELETE FROM participants WHERE game_code = ?", (game_code,))
+        c.execute("DELETE FROM games WHERE game_code = ?", (game_code,))
+        deleted = c.rowcount > 0
+        conn.commit()
+        conn.close()
+
+        if deleted:
+            await callback.message.edit_text(
+                f"✅ Игра <b>{game_code}</b> успешно удалена.",
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.edit_text("❌ Игра не найдена.")
+    except Exception as e:
+        print(f"Ошибка удаления игры: {e}")
+        await callback.message.edit_text("⚠️ Ошибка при удалении игры.")
+
 
 @router.callback_query(lambda c: c.data == "delgame_cancel")
 async def handle_delete_game_cancel(callback: types.CallbackQuery):
-    await callback.answer("Отменено.")
-    await callback.message.edit_text("↩️ Удаление отменено.", reply_markup=get_main_kb_static())
+    await callback.answer()  # ← тоже добавь
+    await callback.message.edit_text(
+        "↩️ Удаление отменено.",
+        reply_markup=get_main_kb_static()
+    )
 
 @router.callback_query(lambda c: c.data == "gift_bought")
 async def handle_gift_bought(callback: types.CallbackQuery):
