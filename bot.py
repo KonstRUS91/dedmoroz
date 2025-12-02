@@ -41,6 +41,7 @@ class Form(StatesGroup):
     waiting_for_wish = State()
     waiting_for_santa_message = State()
     waiting_for_ward_message = State()
+    waiting_for_announcement = State()
 
 # === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
@@ -82,6 +83,7 @@ async def get_main_kb(user_id: int) -> ReplyKeyboardMarkup:
          keyboard.insert(1, [KeyboardButton(text="🎲 Жеребьёвка")])
         keyboard.insert(1, [KeyboardButton(text="👥 Список участников")])
         keyboard.insert(2, [KeyboardButton(text="🗑 Удалить игру")])
+        keyboard.insert(2, [KeyboardButton(text="📣 Отправить объявление")])
 
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -119,7 +121,6 @@ async def create_game_handler(message: Message):
         return
     conn.close()
 
-    # ← ЭТА СТРОКА ДОЛЖНА БЫТЬ С ОТСТУПОМ (4 пробела)!
     game_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     create_game(game_code, message.from_user.id)
     await message.answer(
@@ -226,6 +227,79 @@ async def show_ward_wish(message: Message):
         parse_mode="HTML",
         reply_markup=get_gift_confirmation_kb()
     )
+
+@router.message(lambda m: m.text == "📣 Отправить объявление")
+async def start_announcement(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+
+    # Проверим, что пользователь — создатель
+    conn = sqlite3.connect("santa.db")
+    c = conn.cursor()
+    c.execute("SELECT game_code FROM games WHERE creator_id = ?", (user_id,))
+    game_row = c.fetchone()
+    conn.close()
+
+    if not game_row:
+        await message.answer("❌ Эта функция доступна только создателю игры.")
+        return
+
+    await message.answer(
+        "✍️ Введите текст объявления для всех участников вашей игры:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Отмена")]],
+            resize_keyboard=True
+        )
+    )
+    await state.set_state(Form.waiting_for_announcement)
+    # Сохраним код игры в состоянии, чтобы знать, кому рассылать
+    await state.update_data(game_code=game_row[0])
+
+@router.message(Form.waiting_for_announcement)
+async def send_announcement(message: Message, state: FSMContext):
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("Отменено.", reply_markup=await get_main_kb(message.from_user.id))
+        return
+
+    announcement_text = message.text
+    data = await state.get_data()
+    game_code = data.get("game_code")
+
+    if not game_code:
+        await message.answer("❌ Ошибка: игра не найдена.")
+        await state.clear()
+        return
+
+    # Получаем всех участников этой игры
+    conn = sqlite3.connect("santa.db")
+    c = conn.cursor()
+    c.execute("SELECT user_id FROM participants WHERE game_code = ?", (game_code,))
+    user_ids = [row[0] for row in c.fetchall()]
+    conn.close()
+
+    if not user_ids:
+        await message.answer("📭 В игре нет участников.")
+        await state.clear()
+        return
+
+    # Рассылаем объявление
+    success = 0
+    for uid in user_ids:
+        try:
+            await bot.send_message(
+                uid,
+                f"🔔 <b>Объявление от организатора игры {game_code}:</b>\n\n{announcement_text}",
+                parse_mode="HTML"
+            )
+            success += 1
+        except Exception as e:
+            print(f"Не удалось отправить {uid}: {e}")
+
+    await message.answer(
+        f"✅ Объявление отправлено {success} из {len(user_ids)} участников.",
+        reply_markup=await get_main_kb(message.from_user.id)
+    )
+    await state.clear()
 
 @router.message(lambda m: m.text == "🗑 Удалить игру")
 async def delete_game_button(message: Message):
