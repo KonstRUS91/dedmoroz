@@ -302,32 +302,62 @@ async def send_announcement(message: Message, state: FSMContext):
     await state.clear()
 
 @router.message(lambda m: m.text == "🗑 Удалить игру")
-async def delete_game_button(message: Message):
+async def confirm_delete_game(message: Message):
     user_id = message.from_user.id
 
-    # Найдём игру, созданную этим пользователем
+    # Найдём игру, которую создал пользователь
     conn = sqlite3.connect("santa.db")
     c = conn.cursor()
     c.execute("SELECT game_code FROM games WHERE creator_id = ?", (user_id,))
     game_row = c.fetchone()
+    conn.close()
+
     if not game_row:
         await message.answer("❌ Вы не создавали игру.")
         return
 
     game_code = game_row[0]
 
-    # Удаляем всех участников
+    # Отправляем подтверждение с инлайн-кнопками
+    await message.answer(
+        f"⚠️ Вы уверены, что хотите удалить игру <b>{game_code}</b>?\n\n"
+        "Все участники и данные будут безвозвратно удалены.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"delgame_yes_{game_code}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="delgame_cancel")
+            ]
+        ])
+    )
+
+@router.callback_query(lambda c: c.data.startswith("delgame_yes_"))
+async def handle_delete_game_confirm(callback: types.CallbackQuery):
+    game_code = callback.data.split("_", 3)[3]  # извлекаем код из callback_data
+
+    # Удаляем участников и саму игру
+    conn = sqlite3.connect("santa.db")
+    c = conn.cursor()
     c.execute("DELETE FROM participants WHERE game_code = ?", (game_code,))
-    # Удаляем саму игру
     c.execute("DELETE FROM games WHERE game_code = ?", (game_code,))
+    deleted = c.rowcount > 0
     conn.commit()
     conn.close()
 
-    await message.answer(
-        f"✅ Игра <b>{game_code}</b> удалена. Все участники очищены.",
-        parse_mode="HTML",
-        reply_markup=get_main_kb_static()  # возвращаем базовое меню
-    )
+    if deleted:
+        await callback.answer("✅ Игра удалена.")
+        await callback.message.edit_text(
+            f"✅ Игра <b>{game_code}</b> успешно удалена.",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.answer("❌ Игра не найдена.", show_alert=True)
+        await callback.message.edit_text("❌ Игра не найдена.")
+
+@router.callback_query(lambda c: c.data == "delgame_cancel")
+async def handle_delete_game_cancel(callback: types.CallbackQuery):
+    await callback.answer("Отменено.")
+    await callback.message.edit_text("↩️ Удаление отменено.", reply_markup=get_main_kb_static())
 
 @router.callback_query(lambda c: c.data == "gift_bought")
 async def handle_gift_bought(callback: types.CallbackQuery):
